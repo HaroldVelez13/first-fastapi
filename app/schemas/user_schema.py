@@ -1,36 +1,29 @@
-from typing import List,Optional,Generic, TypeVar
-from pydantic import BaseModel, Field
-from pydantic.generics import GenericModel
+from datetime import date
+from pydantic import BaseModel, EmailStr
+from typing import List
+# Esquema para la creación de un usuario (campos que se esperan en el cuerpo de la petición)
+class UserCreate(BaseModel):
+    first_name: str
+    last_name: str | None = None
+    email: EmailStr
+    birdth_date: date | None = None
 
-# creamos un tipo de variable "cualquiera"
-T = TypeVar("T")
-
-# Creamos el esquema del libro
-class UserSchema(BaseModel):
-    id: Optional[int] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    email: Optional[str] = None
-    birdth_date: Optional[str] = None
+# Esquema para la respuesta (lo que se devuelve al cliente)
+class UserBaseResponse(BaseModel):
+    id: int
+    first_name: str
+    last_name: str | None = None
+    email: EmailStr
+    birdth_date: date | None = None
     
     class Config:
-        # le especificamos que será para uso de un ORM
         orm_mode = True
-        # Colocamos un ejemplo que se mostrará en el SWAGGER
-        schema_extra  = {
-            "example":
-                {
-                    "id": 0,
-                    "first_name": "John",
-                    "last_name": "Doe",
-                    "email": "john@mail.com",
-                    "birdth_date": "1990-01-01"
-                }
-        }
 
-# Creamos un schema de respuesta
-class Response(BaseModel):
-    code: str
-    status: str
-    message: str
-    result: Optional[T]
+class UserResponse(BaseModel):
+    user: UserBaseResponse
+    
+    class Config:
+        orm_mode = True
+
+class UsersResponseList(BaseModel):
+    users: List[UserBaseResponse]

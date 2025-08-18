@@ -1,86 +1,76 @@
-
-from fastapi import APIRouter, HTTPException, Path
-from fastapi import Depends
-from app.config.db import SessionLocal,get_db
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.schemas.user_schema import UserSchema, Response
+from app.config.db import get_db
+from app.schemas.user_schema import UserCreate, UserResponse, UsersResponseList
+from app.repositories.user_repository import UserRepository
+from sqlalchemy.exc import IntegrityError
+from app.repositories.exception import DuplicateEntryError
 
-from app.crud import user as user_crud
-
-# Creamos un router, que es un conjunto de rutas agrupadas
+# Crear el router para las rutas de usuario
 user = APIRouter()
 
-# Cabe mencionar que vamos a usar constantemente dos parametros 
-# "request" el cual es la entrada y será acorde con el esquema "mostrar en SWAGGER"
-# y "db" que es de tipo Sesion y de la cual depende de la conexión de nuestr db
 
-# haremos uso de las funciones que creamos en el archivo de user_crud.py
 
-@user.get("/")
-async def get_users( db: Session = Depends(get_db)):
-    try:
-        _users = user_crud.get_users(db)        
-        return Response(status="Ok", code="200", message="Success fetch all data", result=_users)
-    except Exception as e:
-        print("Error:", e)
-        return Response(
-            status="bad",
-            code="404",
-            message="the data not found"
+# Definir las rutas
+@user.get("/", response_model=UsersResponseList)
+def get_all_users(db: Session = Depends(get_db)):
+    """Obtiene una lista de todos los usuarios."""
+    user_repo = UserRepository(db)
+    _users = user_repo.get_all()
+    return {"users": _users}
+
+@user.get("/{user_id}", response_model=UserResponse)
+def get_user_by_id(user_id: int, db: Session = Depends(get_db)):
+    """Obtiene un solo usuario por su ID."""
+    user_repo = UserRepository(db)
+    user = user_repo.get_by_id(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado"
         )
+    return {"user":user}
 
-
-@user.get("/{user_id}")
-async def get_user(user_id: int,db: Session = Depends(get_db)):
-    _user = user_crud.get_user(db, user_id=user_id)
-    if not _user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return Response(status="Ok", code="200", message="Success fetch data", result=_user)
-
-# Creamos la ruta con la que crearemos 
-@user.post("/")
-async def create_user(request: UserSchema, db: Session = Depends(get_db)):
-    user_crud.create_user(db, user=request)
-    print(request)
-    return Response(status="Ok",
-                    code="200",
-                    message="User created successfully",result=request).dict(exclude_none=True)
-    # retornamos la respuesta con el schema de response
-
-@user.put("/{user_id}")
-async def update_user(user_id:int, request: UserSchema, db: Session = Depends(get_db)):
-    try:
-        data = request.dict(exclude_unset=True)
-        id = user_id
-        first_name = data.get("first_name")
-        last_name = data.get("last_name")
-        email = data.get("email")
-        birdth_date = data.get("birdth_date")
-        _user = user_crud.update_user(db, 
-                                      user_id=id,
-                                        first_name=first_name,
-                                        last_name=last_name,
-                                        email=email,
-                                        birdth_date=birdth_date)
-        return Response(status="Ok", code="200", message="Success update data", result=_user)
-    except Exception as e:
-        return Response(
-            status="bad",
-            code="304",
-            message="the updated gone wrong"
+@user.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+def create_new_user(user: UserCreate, db: Session = Depends(get_db)):
+    """Crea un nuevo usuario."""
+    user_repo = UserRepository(db)
+    # Verificar si el email ya existe
+    if user_repo.check_email(user.email):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail= f"El email {user.email} ya está en uso",
         )
-    # colocamos una excepción por si ocurre un error en la escritura en la db
+    try:
+        new_user = user_repo.create(user)
+        return {"user":new_user}
+    
+    except IntegrityError as e:   
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Error al crear el usuario"
+        )
+    
 
+@user.put("/{user_id}", response_model=UserResponse)
+def update_user_by_id(user_id: int, user: UserCreate, db: Session = Depends(get_db)):
+    """Actualiza un usuario existente."""
+    user_repo = UserRepository(db)
+    updated_user = user_repo.update(user_id, user)
+    if not updated_user:
+        raise DuplicateEntryError(
+            detail="Usuario no encontrado"
+        )
+    return {"user":updated_user}
 
 @user.delete("/{user_id}")
-async def delete_user(user_id:int,  db: Session = Depends(get_db)):
-    try:
-        user_crud.delete_user(db, user_id=user_id)
-        return Response(status="Ok", code="200", message="Success delete data").dict(exclude_none=True)
-    except Exception as e:
-        return Response(
-            status="bad",
-            code="",
-            message="the deleted gone wrong"
+def delete_user_by_id(user_id: int, db: Session = Depends(get_db)):
+    """Elimina un usuario."""
+    user_repo = UserRepository(db)
+    deleted_user = user_repo.delete(user_id)
+    if not deleted_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado"
         )
-    # colocamos una excepción por si ocurre un error en la escritura en la db
+    return {"detail":deleted_user}
