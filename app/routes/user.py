@@ -16,6 +16,27 @@ user = APIRouter()
 
 # haremos uso de las funciones que creamos en el archivo de user_crud.py
 
+@user.get("/")
+async def get_users( db: Session = Depends(get_db)):
+    try:
+        _users = user_crud.get_users(db)        
+        return Response(status="Ok", code="200", message="Success fetch all data", result=_users)
+    except Exception as e:
+        print("Error:", e)
+        return Response(
+            status="bad",
+            code="404",
+            message="the data not found"
+        )
+
+
+@user.get("/{user_id}")
+async def get_user(user_id: int,db: Session = Depends(get_db)):
+    _user = user_crud.get_user(db, user_id=user_id)
+    if not _user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return Response(status="Ok", code="200", message="Success fetch data", result=_user)
+
 # Creamos la ruta con la que crearemos 
 @user.post("/")
 async def create_user(request: UserSchema, db: Session = Depends(get_db)):
@@ -25,13 +46,6 @@ async def create_user(request: UserSchema, db: Session = Depends(get_db)):
                     code="200",
                     message="User created successfully",result=request).dict(exclude_none=True)
     # retornamos la respuesta con el schema de response
-
-
-@user.get("/")
-async def get_users( db: Session = Depends(get_db)):
-    _users = user_crud.get_users(db)
-    return Response(status="Ok", code="200", message="Success fetch all data", result=_users)
-
 
 @user.put("/{user_id}")
 async def update_user(user_id:int, request: UserSchema, db: Session = Depends(get_db)):
